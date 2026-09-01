@@ -1,0 +1,11 @@
+services:
+  flyway:
+    command:
+      - '-url=jdbc:postgresql://postgres:5432/wallet-ledger-service'
+      - '-user=postgres'
+      - '-password=postgres'
+      - '-locations=filesystem:/flyway/migrations,filesystem:/flyway/seed'
+      - '-defaultSchema=wallet-ledger-service'
+      - '-schemas=wallet-ledger-service'
+      - '-connectRetries=60'
+      - 'migrate'

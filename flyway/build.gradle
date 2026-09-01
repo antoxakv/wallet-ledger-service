@@ -1,0 +1,7 @@
+plugins {
+	id 'java'
+}
+
+tasks.named('jar') {
+	archiveBaseName = 'wallet-ledger-service-flyway'
+}

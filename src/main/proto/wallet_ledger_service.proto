@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package wallet.ledger.service.v1;
+
+option java_multiple_files = true;
+option java_package = "com.alpeca.wallet.ledger.grpc.v1";
+option java_outer_classname = "WalletLedgerServiceProto";
+
+// Wallet ledger API for debit, credit, and balance lookup operations.
+service WalletLedgerService {
+  // Debits funds from a wallet using transaction_id as an idempotency key.
+  rpc Debit(WalletOperationRequest) returns (WalletOperationResponse);
+
+  // Credits funds to a wallet using transaction_id as an idempotency key.
+  rpc Credit(WalletOperationRequest) returns (WalletOperationResponse);
+
+  // Returns the current wallet balance.
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+}
+
+// Request for a wallet balance-changing operation.
+message WalletOperationRequest {
+  // Wallet identifier in UUID string format.
+  string wallet_id = 1;
+
+  // Positive operation amount in minor units, encoded as an integer decimal string.
+  string amount = 2;
+
+  // Unique transaction identifier in UUID string format. Reusing the same value
+  // with the same payload returns the original result without re-executing the movement.
+  string transaction_id = 3;
+}
+
+// Response returned after a debit or credit request is recorded.
+message WalletOperationResponse {
+  // Unique transaction identifier in UUID string format.
+  string transaction_id = 1;
+
+  // Wallet identifier in UUID string format.
+  string wallet_id = 2;
+
+  // Wallet balance after the operation in minor units, encoded as an integer decimal string.
+  string balance_after = 3;
+
+  // Operation status. Current values are "success" and "failed".
+  string status = 4;
+}
+
+// Request for current wallet balance lookup.
+message GetBalanceRequest {
+  // Wallet identifier in UUID string format.
+  string wallet_id = 1;
+}
+
+// Response containing the current wallet balance.
+message GetBalanceResponse {
+  // Wallet identifier in UUID string format.
+  string wallet_id = 1;
+
+  // Current wallet balance in minor units, encoded as an integer decimal string.
+  string amount = 2;
+}

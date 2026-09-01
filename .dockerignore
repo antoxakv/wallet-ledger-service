@@ -1,0 +1,12 @@
+*
+!Dockerfile
+!gradlew
+!gradlew.bat
+!settings.gradle
+!build.gradle
+!gradle/
+!gradle/**
+!src/
+!src/**
+!flyway/
+!flyway/build.gradle

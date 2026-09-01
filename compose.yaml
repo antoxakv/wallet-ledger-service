@@ -1,0 +1,121 @@
+name: wallet-ledger-service
+
+services:
+  postgres:
+    image: 'postgres:18.6'
+    command: ['postgres', '-c', 'timezone=UTC']
+    environment:
+      - 'POSTGRES_DB=wallet-ledger-service'
+      - 'POSTGRES_PASSWORD=postgres'
+      - 'POSTGRES_USER=postgres'
+      - 'TZ=UTC'
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d wallet-ledger-service']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  flyway:
+    build:
+      context: ./flyway
+    environment:
+      - 'TZ=UTC'
+    command:
+      - '-url=jdbc:postgresql://postgres:5432/wallet-ledger-service'
+      - '-user=postgres'
+      - '-password=postgres'
+      - '-locations=filesystem:/flyway/migrations'
+      - '-defaultSchema=wallet-ledger-service'
+      - '-schemas=wallet-ledger-service'
+      - '-connectRetries=60'
+      - 'migrate'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  wallet-ledger-service-app:
+    build:
+      context: .
+    image: 'wallet-ledger-service-app'
+    environment:
+      - 'TZ=UTC'
+      - 'SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/wallet-ledger-service?currentSchema=wallet-ledger-service&options=-c%20TimeZone=UTC'
+      - 'SPRING_DATASOURCE_USERNAME=wallet-ledger-service'
+      - 'SPRING_DATASOURCE_PASSWORD=wallet-ledger-service'
+      - 'SPRING_DATA_REDIS_HOST=redis'
+      - 'SPRING_DATA_REDIS_PORT=6379'
+      - 'SPRING_RABBITMQ_HOST=rabbitmq'
+      - 'SPRING_RABBITMQ_PORT=5672'
+      - 'SPRING_RABBITMQ_USERNAME=wallet-ledger-service'
+      - 'SPRING_RABBITMQ_PASSWORD=wallet-ledger-service'
+      - 'SPRING_GRPC_SERVER_ADDRESS=0.0.0.0'
+      - 'SPRING_GRPC_SERVER_PORT=9090'
+    ports:
+      - '9090:9090'
+    depends_on:
+      flyway:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  pgadmin:
+    image: 'dpage/pgadmin4:9.17'
+    environment:
+      - 'PGADMIN_DEFAULT_EMAIL=wallet-ledger-service@local.dev'
+      - 'PGADMIN_DEFAULT_PASSWORD=wallet-ledger-service'
+      - 'TZ=UTC'
+    ports:
+      - '5050:80'
+    depends_on:
+      - postgres
+
+  rabbitmq:
+    build:
+      context: ./rabbitmq
+    image: 'wallet-ledger-service-rabbitmq'
+    environment:
+      - 'TZ=UTC'
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: 'redis:8.10.1'
+    command:
+      - 'redis-server'
+      - '--save'
+      - ''
+      - '--appendonly'
+      - 'no'
+      - '--maxmemory'
+      - '256mb'
+      - '--maxmemory-policy'
+      - 'volatile-lru'
+    environment:
+      - 'TZ=UTC'
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redisinsight:
+    image: 'redis/redisinsight:3.8.0'
+    environment:
+      - 'TZ=UTC'
+    ports:
+      - '5540:5540'
+    depends_on:
+      redis:
+        condition: service_healthy
