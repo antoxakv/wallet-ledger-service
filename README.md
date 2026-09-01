@@ -103,8 +103,6 @@ RabbitMQ entities:
 ```text
 Exchange: wallet.event
 Queue: wallet-event
-Type: fanout
-Routing key: empty string
 ```
 
 ### Redis Insight
