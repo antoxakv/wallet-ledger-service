@@ -8,23 +8,30 @@ import com.alpeca.wallet.ledger.entity.WalletUpdatedOutboxEvent;
 import com.alpeca.wallet.ledger.event.WalletUpdatedEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.amqp.AmqpException;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.core.ReturnedMessage;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.core.MessagePostProcessor;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 
 @ExtendWith(MockitoExtension.class)
 class RabbitWalletUpdatedEventPublisherTests {
@@ -53,8 +60,116 @@ class RabbitWalletUpdatedEventPublisherTests {
     private RabbitWalletUpdatedEventPublisher publisher;
 
     @Test
-    void publishSendsWalletUpdatedEventToConfiguredExchange() {
-        WalletUpdatedOutboxEvent outboxEvent = new WalletUpdatedOutboxEvent(
+    void publishSendsWalletUpdatedEventToConfiguredExchangeAndWaitsForAck() {
+        WalletUpdatedOutboxEvent outboxEvent = outboxEvent();
+        when(rabbitProperties.walletEventExchange()).thenReturn(EXCHANGE);
+        when(rabbitProperties.confirmTimeout()).thenReturn(Duration.ofSeconds(2));
+        doAnswer(invocation -> {
+            CorrelationData correlationData = invocation.getArgument(4);
+            correlationData.getFuture().complete(new CorrelationData.Confirm(true, null));
+            return null;
+        }).when(rabbitTemplate).convertAndSend(
+                eq(EXCHANGE),
+                eq(""),
+                any(WalletUpdatedEvent.class),
+                any(MessagePostProcessor.class),
+                any(CorrelationData.class)
+        );
+
+        publisher.publish(outboxEvent);
+
+        ArgumentCaptor<WalletUpdatedEvent> eventCaptor = ArgumentCaptor.forClass(WalletUpdatedEvent.class);
+        ArgumentCaptor<MessagePostProcessor> postProcessorCaptor = ArgumentCaptor.forClass(MessagePostProcessor.class);
+        ArgumentCaptor<CorrelationData> correlationDataCaptor = ArgumentCaptor.forClass(CorrelationData.class);
+        verify(rabbitTemplate).convertAndSend(
+                eq(EXCHANGE),
+                eq(""),
+                eventCaptor.capture(),
+                postProcessorCaptor.capture(),
+                correlationDataCaptor.capture()
+        );
+        assertThat(eventCaptor.getValue().walletId()).isEqualTo(WALLET_ID);
+        assertThat(eventCaptor.getValue().transactionId()).isEqualTo(TRANSACTION_ID);
+        assertThat(eventCaptor.getValue().typeOperation()).isEqualTo(OperationType.CREDIT);
+        assertThat(eventCaptor.getValue().amount()).isEqualTo(AMOUNT);
+        assertThat(eventCaptor.getValue().balanceAfter()).isEqualTo(BALANCE_AFTER);
+        assertThat(eventCaptor.getValue().createdAt()).isEqualTo(outboxEvent.getEventCreatedAt());
+        assertThat(correlationDataCaptor.getValue().getId()).isEqualTo(outboxEvent.getTransactionId().toString());
+        Message message = postProcessorCaptor.getValue()
+                .postProcessMessage(new Message(new byte[0], new MessageProperties()));
+        assertThat((String) message.getMessageProperties().getHeader(TYPE_HEADER))
+                .isEqualTo(WALLET_UPDATED_EVENT_TYPE);
+        verify(rabbitProperties).walletEventExchange();
+        verify(rabbitProperties).confirmTimeout();
+        verifyNoMoreInteractions(rabbitTemplate, rabbitProperties);
+    }
+
+    @Test
+    void publishFailsWhenBrokerNegativelyAcknowledgesMessage() {
+        WalletUpdatedOutboxEvent outboxEvent = outboxEvent();
+        when(rabbitProperties.walletEventExchange()).thenReturn(EXCHANGE);
+        when(rabbitProperties.confirmTimeout()).thenReturn(Duration.ofSeconds(2));
+        doAnswer(invocation -> {
+            CorrelationData correlationData = invocation.getArgument(4);
+            correlationData.getFuture().complete(new CorrelationData.Confirm(false, "exchange missing"));
+            return null;
+        }).when(rabbitTemplate).convertAndSend(
+                eq(EXCHANGE),
+                eq(""),
+                any(WalletUpdatedEvent.class),
+                any(MessagePostProcessor.class),
+                any(CorrelationData.class)
+        );
+
+        assertThatThrownBy(() -> publisher.publish(outboxEvent))
+                .isInstanceOf(AmqpException.class)
+                .hasMessageContaining("negatively acknowledged")
+                .hasMessageContaining("exchange missing");
+    }
+
+    @Test
+    void publishFailsWhenBrokerReturnsUnroutableMessage() {
+        WalletUpdatedOutboxEvent outboxEvent = outboxEvent();
+        when(rabbitProperties.walletEventExchange()).thenReturn(EXCHANGE);
+        when(rabbitProperties.confirmTimeout()).thenReturn(Duration.ofSeconds(2));
+        doAnswer(invocation -> {
+            CorrelationData correlationData = invocation.getArgument(4);
+            correlationData.setReturned(new ReturnedMessage(
+                    new Message(new byte[0], new MessageProperties()),
+                    312,
+                    "NO_ROUTE",
+                    EXCHANGE,
+                    ""
+            ));
+            correlationData.getFuture().complete(new CorrelationData.Confirm(true, null));
+            return null;
+        }).when(rabbitTemplate).convertAndSend(
+                eq(EXCHANGE),
+                eq(""),
+                any(WalletUpdatedEvent.class),
+                any(MessagePostProcessor.class),
+                any(CorrelationData.class)
+        );
+
+        assertThatThrownBy(() -> publisher.publish(outboxEvent))
+                .isInstanceOf(AmqpException.class)
+                .hasMessageContaining("unroutable")
+                .hasMessageContaining("NO_ROUTE");
+    }
+
+    @Test
+    void publishFailsWhenPublisherConfirmationTimesOut() {
+        WalletUpdatedOutboxEvent outboxEvent = outboxEvent();
+        when(rabbitProperties.walletEventExchange()).thenReturn(EXCHANGE);
+        when(rabbitProperties.confirmTimeout()).thenReturn(Duration.ofMillis(1));
+
+        assertThatThrownBy(() -> publisher.publish(outboxEvent))
+                .isInstanceOf(AmqpException.class)
+                .hasMessageContaining("timed out");
+    }
+
+    private WalletUpdatedOutboxEvent outboxEvent() {
+        return new WalletUpdatedOutboxEvent(
                 new WalletLedger(
                         TRANSACTION_ID,
                         WALLET_ID,
@@ -64,23 +179,5 @@ class RabbitWalletUpdatedEventPublisherTests {
                         BALANCE_AFTER
                 )
         );
-        when(rabbitProperties.walletEventExchange()).thenReturn(EXCHANGE);
-
-        publisher.publish(outboxEvent);
-
-        ArgumentCaptor<WalletUpdatedEvent> eventCaptor = ArgumentCaptor.forClass(WalletUpdatedEvent.class);
-        ArgumentCaptor<MessagePostProcessor> postProcessorCaptor = ArgumentCaptor.forClass(MessagePostProcessor.class);
-        verify(rabbitTemplate).convertAndSend(eq(EXCHANGE), eq(""), eventCaptor.capture(), postProcessorCaptor.capture());
-        assertThat(eventCaptor.getValue().walletId()).isEqualTo(WALLET_ID);
-        assertThat(eventCaptor.getValue().transactionId()).isEqualTo(TRANSACTION_ID);
-        assertThat(eventCaptor.getValue().typeOperation()).isEqualTo(OperationType.CREDIT);
-        assertThat(eventCaptor.getValue().amount()).isEqualTo(AMOUNT);
-        assertThat(eventCaptor.getValue().balanceAfter()).isEqualTo(BALANCE_AFTER);
-        assertThat(eventCaptor.getValue().createdAt()).isEqualTo(outboxEvent.getEventCreatedAt());
-        Message message = postProcessorCaptor.getValue().postProcessMessage(new Message(new byte[0], new MessageProperties()));
-        assertThat((String) message.getMessageProperties().getHeader(TYPE_HEADER))
-                .isEqualTo(WALLET_UPDATED_EVENT_TYPE);
-        verify(rabbitProperties).walletEventExchange();
-        verifyNoMoreInteractions(rabbitTemplate, rabbitProperties);
     }
 }

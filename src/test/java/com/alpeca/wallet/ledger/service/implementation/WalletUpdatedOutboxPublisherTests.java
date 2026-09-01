@@ -79,7 +79,7 @@ class WalletUpdatedOutboxPublisherTests {
         ArgumentCaptor<OffsetDateTime> lockedUntilCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
         verify(properties).processingLockTtl();
         verify(outboxRepository).claimReadyEvents(
-                eq(100),
+                eq(10),
                 eq(MAX_ATTEMPTS),
                 nowCaptor.capture(),
                 lockedUntilCaptor.capture()
@@ -149,7 +149,7 @@ class WalletUpdatedOutboxPublisherTests {
         when(properties.maxAttempts()).thenReturn(MAX_ATTEMPTS);
         when(properties.processingLockTtl()).thenReturn(PROCESSING_LOCK_TTL);
         when(outboxRepository.claimReadyEvents(
-                eq(100),
+                eq(10),
                 eq(MAX_ATTEMPTS),
                 any(OffsetDateTime.class),
                 any(OffsetDateTime.class)
@@ -159,7 +159,7 @@ class WalletUpdatedOutboxPublisherTests {
     private void verifyReadyOutboxEventsClaimed() {
         verify(properties).processingLockTtl();
         verify(outboxRepository).claimReadyEvents(
-                eq(100),
+                eq(10),
                 eq(MAX_ATTEMPTS),
                 any(OffsetDateTime.class),
                 any(OffsetDateTime.class)

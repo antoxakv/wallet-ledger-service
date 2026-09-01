@@ -18,7 +18,8 @@ spring:
     redis:
       host: localhost
       port: 6379
-      timeout: 3s
+      connect-timeout: 500ms
+      timeout: 500ms
       repositories:
         enabled: false
   rabbitmq:
@@ -26,6 +27,11 @@ spring:
     port: 5672
     username: wallet-ledger-service
     password: wallet-ledger-service
+    connection-timeout: 2s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
   grpc:
     server:
       port: 9090
@@ -33,6 +39,7 @@ spring:
 wallet-ledger-service:
   rabbitmq:
     wallet-event-exchange: wallet.event
+    confirm-timeout: 2s
   publisher:
     wallet-updated-outbox:
       processing-lock-ttl: 30s
@@ -42,5 +49,5 @@ wallet-ledger-service:
   redis:
     lock-key-prefix: 'wallet:lock:'
     lock-timeout: 10s
-    lock-retry-attempts: 5
-    lock-retry-backoff: 50ms
+    lock-retry-attempts: 10
+    lock-retry-backoff: 100ms

@@ -23,7 +23,7 @@ class WalletUpdatedOutboxPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(WalletUpdatedOutboxPublisher.class);
 
-    private static final int BATCH_SIZE = 100;
+    private static final int BATCH_SIZE = 10;
 
     private final WalletUpdatedOutboxRepository outboxRepository;
 
