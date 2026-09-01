@@ -15,37 +15,6 @@ docker compose -f compose.infra.yaml up --build -d
 Local application startup:
 
 ```bash
-
-
-
-Spec Hub is your single home for API design and governance. Author specs visually, convert them to collections that stay in sync, and enforce standards across your team with custom governance rules.
-
-
-
-
-
-Work with local files
-Connect a folder to Postman and start working directly with your files. Sync whenever you’re ready. 
-Learn more
-Environment
-localhost:9090
-WalletLedgerService / Credit
-
-Docs
-Message
-Authorization
-Metadata
-Service definition
-Scripts
-Settings
-{
-    "amount": "100",
-    "transaction_id": "10000000-0000-0000-0000-000000000001",
-    "wallet_id": "00000000-0000-0000-0000-000000000001"
-}
-12345
-{    "amount": "100",    "transaction_id": "10000000-0000-0000-0000-000000000001",    "wallet_id": "00000000-0000-0000-0000-000000000001"}
-
 TZ=UTC ./gradlew bootRun
 ```
 
@@ -147,6 +116,7 @@ Redis connection from Redis Insight container/network:
 ```text
 Host: redis
 Port: 6379
+Username: default
 Password: empty
 ```
 
