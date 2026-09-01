@@ -23,8 +23,6 @@ class WalletUpdatedOutboxPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(WalletUpdatedOutboxPublisher.class);
 
-    private static final int BATCH_SIZE = 10;
-
     private final WalletUpdatedOutboxRepository outboxRepository;
 
     private final WalletUpdatedEventPublisher walletUpdatedEventPublisher;
@@ -48,7 +46,7 @@ class WalletUpdatedOutboxPublisher {
     void publishReadyEvents() {
         OffsetDateTime now = OffsetDateTime.now();
         List<WalletUpdatedOutboxEvent> events = outboxRepository.claimReadyEvents(
-                BATCH_SIZE,
+                properties.batchSize(),
                 properties.maxAttempts(),
                 now,
                 now.plus(properties.processingLockTtl())
@@ -80,7 +78,8 @@ class WalletUpdatedOutboxPublisher {
                 event.markExhausted(exception);
             } else {
                 log.warn(
-                        "Wallet updated outbox event publish failed: transactionId={}, walletId={}, attempt={}, maxAttempts={}",
+                        "Wallet updated outbox event publish failed: transactionId={}, walletId={}, "
+                                + "attempt={}, maxAttempts={}",
                         event.getTransactionId(),
                         event.getWalletId(),
                         event.getAttempts(),

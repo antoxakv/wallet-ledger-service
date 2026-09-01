@@ -41,6 +41,8 @@ class WalletUpdatedOutboxPublisherTests {
 
     private static final int MAX_ATTEMPTS = 3;
 
+    private static final int BATCH_SIZE = 10;
+
     private static final Duration PROCESSING_LOCK_TTL = Duration.ofSeconds(30);
 
     private static final Duration RETRY_DELAY = Duration.ofSeconds(10);
@@ -74,12 +76,13 @@ class WalletUpdatedOutboxPublisherTests {
 
         publisher.publishReadyEvents();
 
+        verify(properties).batchSize();
         verify(properties).maxAttempts();
         ArgumentCaptor<OffsetDateTime> nowCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
         ArgumentCaptor<OffsetDateTime> lockedUntilCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
         verify(properties).processingLockTtl();
         verify(outboxRepository).claimReadyEvents(
-                eq(10),
+                eq(BATCH_SIZE),
                 eq(MAX_ATTEMPTS),
                 nowCaptor.capture(),
                 lockedUntilCaptor.capture()
@@ -146,10 +149,11 @@ class WalletUpdatedOutboxPublisherTests {
     }
 
     private void givenReadyOutboxEventsClaimed(List<WalletUpdatedOutboxEvent> events) {
+        when(properties.batchSize()).thenReturn(BATCH_SIZE);
         when(properties.maxAttempts()).thenReturn(MAX_ATTEMPTS);
         when(properties.processingLockTtl()).thenReturn(PROCESSING_LOCK_TTL);
         when(outboxRepository.claimReadyEvents(
-                eq(10),
+                eq(BATCH_SIZE),
                 eq(MAX_ATTEMPTS),
                 any(OffsetDateTime.class),
                 any(OffsetDateTime.class)
@@ -157,9 +161,10 @@ class WalletUpdatedOutboxPublisherTests {
     }
 
     private void verifyReadyOutboxEventsClaimed() {
+        verify(properties).batchSize();
         verify(properties).processingLockTtl();
         verify(outboxRepository).claimReadyEvents(
-                eq(10),
+                eq(BATCH_SIZE),
                 eq(MAX_ATTEMPTS),
                 any(OffsetDateTime.class),
                 any(OffsetDateTime.class)

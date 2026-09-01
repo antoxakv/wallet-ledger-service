@@ -11,6 +11,7 @@ import java.time.Duration;
 /**
  * Wallet updated outbox publisher scheduling and retry properties.
  *
+ * @param batchSize maximum number of outbox events claimed for one publication cycle.
  * @param processingLockTtl time-to-live for claimed outbox events.
  * @param retryDelay delay before retrying a failed broker publication.
  * @param maxAttempts maximum number of broker publication attempts before exhaustion.
@@ -18,6 +19,9 @@ import java.time.Duration;
 @Validated
 @ConfigurationProperties(prefix = "wallet-ledger-service.publisher.wallet-updated-outbox")
 public record WalletUpdatedOutboxPublisherProperties(
+		@Min(1)
+		int batchSize,
+
 		@NotNull
 		@DurationMin(seconds = 1)
 		Duration processingLockTtl,
