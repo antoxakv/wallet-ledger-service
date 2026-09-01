@@ -42,7 +42,7 @@ wallet-ledger-service:
     confirm-timeout: 2s
   publisher:
     wallet-updated-outbox:
-      processing-lock-ttl: 30s
+      processing-lock-ttl: 60s
       retry-delay: 5s
       fixed-delay-ms: 1000
       max-attempts: 10

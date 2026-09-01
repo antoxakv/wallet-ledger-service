@@ -18,10 +18,10 @@ PostgreSQL remains the source of truth and provides the final protection against
 
 This provides two layers of coordination:
 
-1. Redis serializes concurrent operations for the same wallet before they reach the database. Lock acquisition is retried for a bounded period to allow short-lived competing operations to complete instead of immediately rejecting the request. PostgreSQL row-level locking remains the final consistency guarantee.
+1. Redis serializes concurrent operations for the same wallet before they reach the database and allows short-lived contention to resolve through bounded retries.
 2. PostgreSQL row-level locking provides the final consistency guarantee.
 
-Operations for different wallet can be processed concurrently, while operations modifying the same wallet are intentionally serialized.
+Operations for different wallets can be processed concurrently, while operations modifying the same wallet are intentionally serialized.
 
 ### Idempotency
 
