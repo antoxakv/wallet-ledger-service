@@ -2,6 +2,79 @@
 
 gRPC service for wallet operations: `Debit`, `Credit`, and `GetBalance`.
 
+The service maintains wallet balances and an immutable transaction ledger, prevents double-spending under concurrent requests, provides idempotent transaction processing, and publishes wallet update events to RabbitMQ using the Transactional Outbox pattern.
+
+## Architecture and Design Decisions
+
+### Concurrency and Double-Spending Protection
+
+Wallet operations for the same wallet are serialized to prevent concurrent balance updates and double-spending.
+
+A Redis-based distributed lock is acquired before executing a debit or credit operation. If the lock is temporarily held by another request, the service retries lock acquisition for a bounded period instead of failing immediately. This allows short-lived concurrent requests for the same wallet to wait for the previous operation to complete and still have a chance to execute successfully.
+
+Redis is not the final consistency guarantee. Balance modifications are performed inside a database transaction and the wallet row is locked using PostgreSQL row-level locking (`SELECT ... FOR UPDATE`).
+
+PostgreSQL remains the source of truth and provides the final protection against concurrent balance modifications. If Redis is temporarily unavailable, wallet operations fall back to database locking.
+
+This provides two layers of coordination:
+
+1. Redis coordinates concurrent requests for the same wallet before they reach the database and reduces database lock contention.
+2. PostgreSQL row-level locking provides the final consistency guarantee.
+
+Operations for different wallet can be processed concurrently, while operations modifying the same wallet are intentionally serialized.
+
+### Idempotency
+
+Every debit and credit request contains a unique `transaction_id`.
+
+Before executing a financial operation, the service checks whether the transaction has already been processed. If the same `transaction_id` is received again with the same wallet, operation type, and amount, the previously stored result is returned without executing the financial movement again.
+
+If the same `transaction_id` is reused with different request parameters, the request is treated as a conflict.
+
+A database uniqueness constraint provides the final protection against concurrent requests attempting to create the same transaction simultaneously.
+
+Failed debit attempts caused by insufficient funds are also stored in the immutable ledger. This ensures that retrying the same transaction later returns the original failed result instead of unexpectedly executing the debit after the wallet balance has changed.
+
+### Immutable Ledger
+
+Every processed wallet operation is appended to `wallet_ledger`.
+
+Ledger records are never updated or deleted. The ledger stores the result of processed wallet transactions, including successful operations and deterministic failed debit attempts.
+
+The current wallet balance is stored separately in the `wallet` table for efficient reads and updates.
+
+### Transactional Outbox
+
+Wallet update events are not published directly to RabbitMQ from the wallet database transaction.
+
+A successful wallet operation creates an outbox record in the same PostgreSQL transaction as the wallet balance update and ledger entry. A separate publisher reads pending outbox records and publishes `WalletUpdatedEvent` messages to RabbitMQ.
+
+This avoids the dual-write problem where the database transaction succeeds but the application fails before the corresponding RabbitMQ event is published.
+
+The database transaction therefore atomically persists:
+
+1. the updated wallet balance;
+2. the immutable ledger entry;
+3. the outbox event.
+
+PostgreSQL remains the authoritative source of wallet state.
+
+### Message Delivery Semantics
+
+RabbitMQ event delivery is **at-least-once**.
+
+A failure can occur after an event has successfully been published to RabbitMQ but before the corresponding outbox record is marked as published. In that case, the event can be published again.
+
+Downstream consumers should therefore process wallet update events idempotently using the transaction id.
+
+### Locking Trade-off
+
+Lock acquisition does not fail immediately when another request currently owns the Redis lock. The service retries acquisition for a bounded period so that a request can wait for a short-running wallet operation to finish and then proceed normally.
+
+The waiting period is bounded, so requests cannot wait indefinitely.
+
+The Redis lock is an additional distributed coordination mechanism; PostgreSQL row-level locking remains the final correctness guarantee.
+
 ## Run Modes
 
 ### Infrastructure only + local application
@@ -120,7 +193,9 @@ Password: empty
 
 ## Seed Wallets
 
-Seed data is enabled by adding `compose.seed.yaml` to the Docker Compose command. Migration file: `flyway/src/main/resources/db/seed/R__seed_wallets.sql`.
+Seed data is enabled by adding `compose.seed.yaml` to the Docker Compose command.
+
+Migration file: `flyway/src/main/resources/db/seed/R__seed_wallets.sql`.
 
 | wallet_id | balance |
 | --- | ---: |
