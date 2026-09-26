@@ -22,9 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataRedisTest(properties = {
         "wallet-ledger-service.redis.lock-key-prefix=wallet:lock:",
-        "wallet-ledger-service.redis.lock-timeout=10s",
-        "wallet-ledger-service.redis.lock-retry-attempts=1",
-        "wallet-ledger-service.redis.lock-retry-backoff=50ms"
+        "wallet-ledger-service.redis.lock-timeout=10s"
 })
 @EnableConfigurationProperties(WalletRedisProperties.class)
 @Import(RedisWalletLockService.class)

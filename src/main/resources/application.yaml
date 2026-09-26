@@ -50,5 +50,3 @@ wallet-ledger-service:
   redis:
     lock-key-prefix: 'wallet:lock:'
     lock-timeout: 10s
-    lock-retry-attempts: 10
-    lock-retry-backoff: 100ms
